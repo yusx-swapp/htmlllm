@@ -11,16 +11,17 @@ EXPERIMENT_NAME = 'SDLLMFineTune'
 DISABLE_MLFLOW = False
 STEPS_EVAL = 500
 
-MOUNT_PATH = '/sd'
+MOUNT_PATH = '/data'
 
 # DATA
-TRAIN_FILE = MOUNT_PATH + '/data/Random50k-Processed-Train.tsv'
-TEST_FILE = MOUNT_PATH + '/data/GTXHtmlSnippets.tsv'
-GENERATED_FILE = MOUNT_PATH + '/data/GTX-v1-500.tsv'
-OUTPUT_DIR = MOUNT_PATH + '/modelv1'
+TRAIN_FILE = MOUNT_PATH + '/code/htmlllm/data/Top40Domains-Processed-Train.tsv'
+TEST_FILE = MOUNT_PATH + '/code/htmlllm/data/GTXHtmlSnippets.tsv'
+GENERATED_FILE = MOUNT_PATH + '/data/GTX-v2-500.tsv'
+OUTPUT_DIR = MOUNT_PATH + '/output/mistralv3-top-domain'
 
 # MODEL Details
-MODEL_PATH = MOUNT_PATH + '/chec/mistral/mistral_hf/7B'
+# MODEL_PATH = MOUNT_PATH + '/chec/mistral/mistral_hf/7B'
+MODEL_PATH = "mistralai/Mistral-7B-Instruct-v0.3"
 TOKENIZER = AutoTokenizer.from_pretrained(MODEL_PATH)
 MODEL = MistralForCausalLM.from_pretrained(
     MODEL_PATH, load_in_8bit=False, device_map=None, torch_dtype=torch.float16, use_cache=True)
