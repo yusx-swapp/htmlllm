@@ -21,6 +21,11 @@ import argparse
 def parse_args():
     parser = argparse.ArgumentParser(
         description="Finetune a transformers model on a causal language modeling task")
+    parser.add_argument("--local_rank",
+                        type=int,
+                        default=-1,
+                        help="local_rank for distributed training on gpus")
+
     if config.DEEPSPEED_ENABLE:
         import deepspeed
         parser = deepspeed.add_config_arguments(parser)
@@ -51,6 +56,7 @@ if __name__ == '__main__':
         for step, data in tqdm(enumerate(train_dataloader), total=len(train_dataloader), disable=not utils.is_master(rank),
                                desc=f'Epoch {epoch}/{config.NUM_EPOCHS}'):
             model.train()
+            data = utils.to_device(data, local_rank)
             loss = model(**data).loss
 
             if config.DEEPSPEED_ENABLE:

@@ -45,6 +45,16 @@ def get_model_wrapper():
     return model_auto_wrap_policy
 
 
+def to_device(batch, device):
+    output = {}
+    for k, v in batch.items():
+        try:
+            output[k] = v.to(device)
+        except:
+            output[k] = v
+    return output
+
+
 def save_model_checkpoint(
         model,
         output_dir,
@@ -181,7 +191,13 @@ def get_train_ds_config(offload,
         "stage3_param_persistence_threshold": 1e4,
         "stage3_max_live_parameters": 3e7,
         "stage3_prefetch_bucket_size": 3e7,
-        "memory_efficient_linear": False
+        "memory_efficient_linear": False,
+        # "zero_quantized_weights": True,
+        # "zero_hpz_partition_size": 16,
+        # "zero_quantized_gradients": True,
+
+        # "contiguous_gradients": True,
+        # "overlap_comm": True
     }
     if enable_mixed_precision_lora:
         zero_opt_dict["zero_quantized_nontrainable_weights"] = True

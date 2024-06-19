@@ -40,7 +40,7 @@ def setup():
                                               stage=config.ZERO_STAGE,
                                               enable_tensorboard=config.D_TENSORBOARD,
                                               enable_wandb=config.D_WANDB,
-                                              tb_path=os.join(
+                                              tb_path=os.path.join(
                                                   config.OUTPUT_DIR, 'ds_tensorboard'),
                                               tb_name=config.EXPERIMENT_NAME)
     else:
@@ -88,7 +88,34 @@ def setup():
     dtype = torch.bfloat16
     model.config.pad_token_id = model.config.bos_token_id
     model.to(dtype=dtype)
+    # Update code based on the Dataset
+    df_train = pd.read_csv(config.TRAIN_FILE, sep='\t',
+                           header=None, encoding="utf-8")
+    df_train.columns = ['URLHash', 'Snippet', 'NodeList']
 
+    train_dataset = dataset.TrainDataset(
+        snippets=df_train['Snippet'], tasks=df_train['NodeList'], tokenizer=tokenizer)
+
+    # DistributedSampler ensures that each process (GPU) samples a different subset of data from the train_dataset
+    train_sampler = DistributedSampler(
+        train_dataset,
+        rank=rank,
+        num_replicas=world_size,
+        shuffle=True,
+    )
+
+    # PyTorch allocates pinned memory for the data loader. This pinned memory is directly accessible by the GPU, which can significantly speed up data transfer.
+    # drop_last: DataLoader will drop the last batch if its size is less than the specified batch size
+    # default_data_collator is a simple utility in the Hugging Face Transformers library that helps create batches of data for training or evaluation.
+    train_dataloader = torch.utils.data.DataLoader(
+        train_dataset,
+        batch_size=config.BATCH_SIZE,
+        num_workers=4,
+        pin_memory=True,
+        sampler=train_sampler,
+        drop_last=True,
+        collate_fn=default_data_collator,
+    )
     if config.DEEPSPEED_ENABLE:
         from deepspeed.ops.adam import DeepSpeedCPUAdam
         import deepspeed
@@ -138,34 +165,5 @@ def setup():
             num_warmup_steps=len(train_dataloader) * config.WARMUP,
             num_training_steps=len(train_dataloader) * config.NUM_EPOCHS
         )
-
-    # Update code based on the Dataset
-    df_train = pd.read_csv(config.TRAIN_FILE, sep='\t',
-                           header=None, encoding="utf-8")
-    df_train.columns = ['URLHash', 'Snippet', 'NodeList']
-
-    train_dataset = dataset.TrainDataset(
-        snippets=df_train['Snippet'], tasks=df_train['NodeList'], tokenizer=tokenizer)
-
-    # DistributedSampler ensures that each process (GPU) samples a different subset of data from the train_dataset
-    train_sampler = DistributedSampler(
-        train_dataset,
-        rank=rank,
-        num_replicas=world_size,
-        shuffle=True,
-    )
-
-    # PyTorch allocates pinned memory for the data loader. This pinned memory is directly accessible by the GPU, which can significantly speed up data transfer.
-    # drop_last: DataLoader will drop the last batch if its size is less than the specified batch size
-    # default_data_collator is a simple utility in the Hugging Face Transformers library that helps create batches of data for training or evaluation.
-    train_dataloader = torch.utils.data.DataLoader(
-        train_dataset,
-        batch_size=config.BATCH_SIZE,
-        num_workers=4,
-        pin_memory=True,
-        sampler=train_sampler,
-        drop_last=True,
-        collate_fn=default_data_collator,
-    )
 
     return model, train_dataloader, optimizer, scheduler, local_rank, rank, world_size
