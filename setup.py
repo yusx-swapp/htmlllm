@@ -29,11 +29,27 @@ def setup():
     # NCCL (NVIDIA Collective Communications Library)
     # checks whether the distributed process group has been successfully initialized.
     timeout = timedelta(hours=5)
-    dist.init_process_group("nccl", timeout=timeout, rank=rank, world_size=world_size)
-    assert torch.distributed.is_initialized()
+    if config.DEEPSPEED_ENABLE:
+        import deepspeed
+        from deepspeed import get_accelerator
+        get_accelerator().set_device(local_rank)
+        deepspeed.init_distributed()
+        ds_config = utils.get_train_ds_config(offload=config.OFFLOAD_TO_CPU,
+                                              micro_bs=config.BATCH_SIZE,
+                                              dtype=config.D_TYPE,
+                                              stage=config.ZERO_STAGE,
+                                              enable_tensorboard=config.D_TENSORBOARD,
+                                              enable_wandb=config.D_WANDB,
+                                              tb_path=os.join(
+                                                  config.OUTPUT_DIR, 'ds_tensorboard'),
+                                              tb_name=config.EXPERIMENT_NAME)
+    else:
+        dist.init_process_group("nccl", timeout=timeout,
+                                rank=rank, world_size=world_size)
+        assert torch.distributed.is_initialized()
 
-    # set device & empty cache
-    torch.cuda.set_device(local_rank)
+        # set device & empty cache
+        torch.cuda.set_device(local_rank)
     torch.cuda.empty_cache()
 
     # initialize tokenizer & model from config
@@ -64,7 +80,8 @@ def setup():
             return out + torch.zeros_like(out).uniform_(-mag_norm, mag_norm)
 
         # Replace the forward function of the embedding object with the new one
-        model.model.embed_tokens.forward = new_forward.__get__(model.model.embed_tokens, torch.nn.Embedding)
+        model.model.embed_tokens.forward = new_forward.__get__(
+            model.model.embed_tokens, torch.nn.Embedding)
 
     # convert the data type of all the parameters and buffers of a model to torch.bfloat16.
     # set the padding token ID to be the same as the BOS token ID.
@@ -72,36 +89,63 @@ def setup():
     model.config.pad_token_id = model.config.bos_token_id
     model.to(dtype=dtype)
 
-    # gradient checkpointing is a technique that helps reduce the memory footprint required for executing large neural network models during training.
-    # during the forward pass, gradient checkpointing does not store all intermediate activations.
-    # it strategically selects certain activations to save, allowing only a fraction of the activations to be re-computed during the backward pass.
-    model.gradient_checkpointing_enable()
+    if config.DEEPSPEED_ENABLE:
+        from deepspeed.ops.adam import DeepSpeedCPUAdam
+        import deepspeed
+        AdamOptimizer = DeepSpeedCPUAdam if config.OFFLOAD_TO_CPU else optim.AdamW
+        optimizer = AdamOptimizer(model.parameters(),
+                                  lr=config.LEARNING_RATE,
+                                  weight_decay=0.)
+        scheduler = get_cosine_schedule_with_warmup(
+            optimizer,
+            num_warmup_steps=len(train_dataloader) * config.WARMUP,
+            num_training_steps=len(train_dataloader) * config.NUM_EPOCHS
+        )
+        model, optimizer, _, scheduler = deepspeed.initialize(
+            model=model,
+            optimizer=optimizer,
+            # args=args,
+            config=ds_config,
+            lr_scheduler=scheduler,
+            dist_init_required=True)
+    else:
+        # gradient checkpointing is a technique that helps reduce the memory footprint required for executing large neural network models during training.
+        # during the forward pass, gradient checkpointing does not store all intermediate activations.
+        # it strategically selects certain activations to save, allowing only a fraction of the activations to be re-computed during the backward pass.
+        model.gradient_checkpointing_enable()
 
-    # auto_wrap_policy controls which layers in the model will be wrapped in FSDP
-    # limit_all_gathers=True: This argument controls whether to limit all gather operations. This can help to save memory when the model is large.
-    # sync_module_states=False: This argument controls whether to synchronize the state of different modules across devices.
-    model = FSDP(
-        model,
-        auto_wrap_policy=utils.get_model_wrapper(),
-        mixed_precision=None,
-        sharding_strategy=utils.fsdp_config.sharding_strategy,
-        device_id=torch.cuda.current_device(),
-        limit_all_gathers=True,
-        sync_module_states=False,
-        param_init_fn=None
-    )
+        # auto_wrap_policy controls which layers in the model will be wrapped in FSDP
+        # limit_all_gathers=True: This argument controls whether to limit all gather operations. This can help to save memory when the model is large.
+        # sync_module_states=False: This argument controls whether to synchronize the state of different modules across devices.
+        model = FSDP(
+            model,
+            auto_wrap_policy=utils.get_model_wrapper(),
+            mixed_precision=None,
+            sharding_strategy=utils.fsdp_config.sharding_strategy,
+            device_id=torch.cuda.current_device(),
+            limit_all_gathers=True,
+            sync_module_states=False,
+            param_init_fn=None
+        )
 
-    optimizer = optim.AdamW(
-        model.parameters(),
-        lr=config.LEARNING_RATE,
-        weight_decay=0.0,
-    )
+        optimizer = optim.AdamW(
+            model.parameters(),
+            lr=config.LEARNING_RATE,
+            weight_decay=0.0,
+        )
+        scheduler = get_cosine_schedule_with_warmup(
+            optimizer,
+            num_warmup_steps=len(train_dataloader) * config.WARMUP,
+            num_training_steps=len(train_dataloader) * config.NUM_EPOCHS
+        )
 
     # Update code based on the Dataset
-    df_train = pd.read_csv(config.TRAIN_FILE, sep='\t', header=None, encoding="utf-8")
+    df_train = pd.read_csv(config.TRAIN_FILE, sep='\t',
+                           header=None, encoding="utf-8")
     df_train.columns = ['URLHash', 'Snippet', 'NodeList']
 
-    train_dataset = dataset.TrainDataset(snippets=df_train['Snippet'], tasks=df_train['NodeList'], tokenizer=tokenizer)
+    train_dataset = dataset.TrainDataset(
+        snippets=df_train['Snippet'], tasks=df_train['NodeList'], tokenizer=tokenizer)
 
     # DistributedSampler ensures that each process (GPU) samples a different subset of data from the train_dataset
     train_sampler = DistributedSampler(
@@ -122,12 +166,6 @@ def setup():
         sampler=train_sampler,
         drop_last=True,
         collate_fn=default_data_collator,
-    )
-
-    scheduler = get_cosine_schedule_with_warmup(
-        optimizer,
-        num_warmup_steps=len(train_dataloader) * config.WARMUP,
-        num_training_steps=len(train_dataloader) * config.NUM_EPOCHS
     )
 
     return model, train_dataloader, optimizer, scheduler, local_rank, rank, world_size
