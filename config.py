@@ -8,7 +8,7 @@ NUM_EPOCHS = 3  # TODO: Check before submit job (Checked)
 # TODO: Check before submit job (Checked, smaller for Phi-3)
 LEARNING_RATE = 1e-5
 WARMUP = 0.1
-EXPERIMENT_NAME = 'SDLLMFineTune'
+EXPERIMENT_NAME = 'Default'
 DISABLE_MLFLOW = False
 STEPS_EVAL = 500  # TODO: Check before submit job (Checked)
 # DeepSpeed basic configuration
