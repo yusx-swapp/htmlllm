@@ -1,12 +1,27 @@
 
+import argparse
 
-# from transformers import AutoTokenizer, AutoModelForCausalLM
-# import torch
 
-BATCH_SIZE = 2  # TODO: Check before submit job (Checked)
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description="Finetune a transformers model on a causal language modeling task")
+    parser.add_argument("--local_rank",
+                        type=int,
+                        default=-1,
+                        help="local_rank for distributed training on gpus")
+    parser.add_argument("--STEP",
+                        type=int,
+                        default=0,
+                        help="STEP for inference")
+    args = parser.parse_args()
+    return args
+
+
+args = parse_args()
+BATCH_SIZE = 16  # TODO: Check before submit job (Checked)
 NUM_EPOCHS = 3  # TODO: Check before submit job (Checked)
 # TODO: Check before submit job (Checked, smaller for Phi-3)
-LEARNING_RATE = 2e-5
+LEARNING_RATE = 3e-5
 WARMUP = 0.1
 EXPERIMENT_NAME = 'Default'
 DISABLE_MLFLOW = False
@@ -23,21 +38,26 @@ D_WANDB = False  # Not recommended to enable this, as it will conflict with MLfl
 D_TYPE = 'bf16'  # bf16 is faster and memory efficient
 
 
-MOUNT_PATH = '/data'  # TODO: Check before submit job (Checked)
-
+MOUNT_PATH = '/vdata'  # TODO: Check before submit job (Checked)
+M_MOUNT_PATH = '/mdata'  # TODO: Check before submit job (Checked)
 # DATA
 # TODO: Check before submit job (Checked)
-TRAIN_FILE = MOUNT_PATH + '/code/htmlllm/data/TrainingDataMerged.tsv'
-TEST_FILE = MOUNT_PATH + '/code/htmlllm/data/GTXHtmlSnippets.tsv'
-GENERATED_FILE = MOUNT_PATH + '/data/test_run.tsv'
+TRAIN_FILE = MOUNT_PATH + '/data/TrainingDataMerged.tsv'
+TEST_FILE = M_MOUNT_PATH + '/code/htmlllm/data/GTXHtmlSnippets.tsv'
+
+
+STEP = args.STEP
+GENERATED_FILE = M_MOUNT_PATH + '/eval/Sixing-Mistral-V3-'+f"step-{STEP}.tsv"
 # TODO: Check before submit job (Checked)
-OUTPUT_DIR = MOUNT_PATH + '/output/output_Codestral-22B-run1/'
+OUTPUT_DIR = M_MOUNT_PATH + \
+    '/output/output_Mistral-mixed-data-MI200-run1/'+f"step-{STEP}"
+# META_INFO_DIR = M_MOUNT_PATH + "/output/output_Mistral-mixed-data-MI200-run1/step-0/"
+META_INFO_DIR = None
 
 # MODEL Details
 # MODEL_PATH = MOUNT_PATH + '/chec/mistral/mistral_hf/7B'
-# MODEL_PATH = "microsoft/Phi-3-mini-4k-instruct"
-MODEL_PATH = "mistralai/Codestral-22B-v0.1"
-# MODEL_PATH = "mistralai/Mistral-7B-Instruct-v0.3"  # TODO: Check before submit job (Checked)
+MODEL_PATH = "mistralai/Mistral-7B-Instruct-v0.3"
+# MODEL_PATH = "microsoft/Phi-3-mini-4k-instruct"  # TODO: Check before submit job (Checked)
 ENABLE_NEFTUNE = True
 NEFTUNE_ALPHA = 0
 
