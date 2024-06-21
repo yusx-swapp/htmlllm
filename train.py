@@ -67,7 +67,7 @@ if __name__ == '__main__':
     for epoch in range(config.NUM_EPOCHS):
 
         # disable: This disables the progress bar if local_rank is not 0.
-        for step, data in tqdm(enumerate(train_dataloader), total=len(train_dataloader), disable=not utils.is_master(rank),
+        for step, data in tqdm(enumerate(train_dataloader), total=len(train_dataloader), disable=not utils.is_master(local_rank),
                                desc=f'Epoch {epoch}/{config.NUM_EPOCHS}'):
             model.train()
             if config.DEEPSPEED_ENABLE:
