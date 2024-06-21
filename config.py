@@ -1,37 +1,49 @@
 
 
-from transformers import MistralForCausalLM, AutoTokenizer
-import torch
+# from transformers import AutoTokenizer, AutoModelForCausalLM
+# import torch
 
-BATCH_SIZE = 4
-NUM_EPOCHS = 3
-LEARNING_RATE = 2e-5
+BATCH_SIZE = 4  # TODO: Check before submit job (Checked)
+NUM_EPOCHS = 3  # TODO: Check before submit job (Checked)
+# TODO: Check before submit job (Checked, smaller for Phi-3)
+LEARNING_RATE = 1e-5
 WARMUP = 0.1
 EXPERIMENT_NAME = 'SDLLMFineTune'
 DISABLE_MLFLOW = False
-STEPS_EVAL = 500
+STEPS_EVAL = 500  # TODO: Check before submit job (Checked)
+# DeepSpeed basic configuration
+DEEPSPEED_ENABLE = True  # TODO: Check before submit job (Checked)
+# (slower, but memory efficient) Enable this to offload optimizer to CPU
+OFFLOAD_TO_CPU = False
+# (stage 1, 2, 3) 1 is the fastest (memory costly), 3 is the slowest (memory efficient)
+ZERO_STAGE = 1
+# Enable this to use TensorBoard that tracks deepspeed metrics e.g, memory usage, FLOPs etc.
+D_TENSORBOARD = False
+D_WANDB = False  # Not recommended to enable this, as it will conflict with MLflow
+D_TYPE = 'bf16'  # bf16 is faster and memory efficient
 
-MOUNT_PATH = '/data'
+
+MOUNT_PATH = '/data'  # TODO: Check before submit job (Checked)
 
 # DATA
-TRAIN_FILE = MOUNT_PATH + '/code/htmlllm/data/Top40Domains-Processed-Train.tsv'
+# TODO: Check before submit job (Checked)
+TRAIN_FILE = MOUNT_PATH + '/code/htmlllm/data/TrainingDataMerged.tsv'
 TEST_FILE = MOUNT_PATH + '/code/htmlllm/data/GTXHtmlSnippets.tsv'
-GENERATED_FILE = MOUNT_PATH + '/data/GTX-v2-500.tsv'
-OUTPUT_DIR = MOUNT_PATH + '/output/mistralv3-top-domain'
+GENERATED_FILE = MOUNT_PATH + '/data/test_run.tsv'
+# TODO: Check before submit job (Checked)
+OUTPUT_DIR = MOUNT_PATH + '/output/output_Phi3mini-mixed-data-A100-run2/'
 
 # MODEL Details
 # MODEL_PATH = MOUNT_PATH + '/chec/mistral/mistral_hf/7B'
-MODEL_PATH = "mistralai/Mistral-7B-Instruct-v0.3"
-TOKENIZER = AutoTokenizer.from_pretrained(MODEL_PATH)
-MODEL = MistralForCausalLM.from_pretrained(
-    MODEL_PATH, load_in_8bit=False, device_map=None, torch_dtype=torch.float16, use_cache=True)
+MODEL_PATH = "microsoft/Phi-3-mini-4k-instruct"
+# MODEL_PATH = "microsoft/Phi-3-mini-4k-instruct"  # TODO: Check before submit job (Checked)
 ENABLE_NEFTUNE = True
 NEFTUNE_ALPHA = 0
 
-# TODO: Token Distribution
+
 # The default setting in CrossEntropyLoss
 IGNORE_INDEX = -100
-MAX_LENGTH_TRAIN = 4096
+MAX_LENGTH_TRAIN = 4096  # TODO: Check before submit job (Checked)
 MAX_LENGTH_INFERENCE = 4096
 MAX_NEW_TOKENS = 400
 
@@ -51,12 +63,3 @@ PROMPT_PART2_TRAIN = f'''
 PROMPT_PART2_INFERENCE = f'''
 #### Answer: 
 '''
-
-
-# DEEPSPEED CONFIG
-DEEPSPEED_ENABLE = True
-OFFLOAD_TO_CPU = False
-ZERO_STAGE = 2
-D_TENSORBOARD = False
-D_WANDB = False
-D_TYPE = 'bf16'

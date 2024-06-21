@@ -74,3 +74,57 @@ class EvalDataset(Dataset):
             'input_ids': torch.tensor(res['input_ids']),
             'attention_mask': torch.tensor(res['attention_mask'])
         }
+
+
+
+class PromptDataset(Dataset):
+    def __init__(self, dataset, tokenizer, max_seq_len=4096):
+        self.dataset = dataset
+        self.tokenizer = tokenizer
+        self.max_seq_len = max_seq_len
+        #['URLHash', 'Snippet', 'NodeList']
+    def __len__(self):
+        return len(self.dataset)
+
+    def __getitem__(self, idx):
+
+        snippet = self.dataset[idx]['Snippet']
+        task = str(self.dataset[idx]['NodeList']
+                   ) if self.dataset[idx]['NodeList'] else "There is no primary text node label in this HTML document."
+        import utils
+        context = utils.apply_prompt_part1_template(snippet)
+        generate_text = utils.apply_prompt_part2_train_template(task)
+
+        res = self.tokenizer(f"{self.tokenizer.bos_token} {context}", generate_text + f" {self.tokenizer.eos_token}",
+                             add_special_tokens=False, max_length=self.max_seq_len, padding='max_length',
+                             truncation='only_first')
+        # # padding left
+        # tokenized_prompt = self.tokenizer(
+        #     prompt, padding="max_length",
+        #     truncation=True,
+        #     max_length=self.max_seq_len,
+        #     return_tensors="pt")
+        # Count length of Generate Text so that Context can be masked
+        generate_text_num_tokens = len(self.tokenizer.encode(generate_text + f" {self.tokenizer.eos_token}",
+                                                             add_special_tokens=False, padding=False))
+        # Initialize labels as Input Token Ids and later mask context
+        import copy
+        import config
+        labels = torch.tensor(copy.deepcopy(
+            res['input_ids']), dtype=torch.int64)
+        if self.tokenizer.padding_side == 'left':
+            # If padding size if left, we have to ignore all tokens except the generate text
+            labels[:-generate_text_num_tokens] = config.IGNORE_INDEX
+        else:
+            # Else Count non-padded tokens and first mask the context and then the padding
+            context_truncated_len = sum(
+                res['attention_mask']) - generate_text_num_tokens
+            labels[:context_truncated_len] = config.IGNORE_INDEX
+            labels[sum(res['attention_mask']):] = config.IGNORE_INDEX
+
+        return {
+            'input_ids': torch.tensor(res['input_ids'], dtype=torch.int64),
+            'attention_mask': torch.tensor(res['attention_mask']),
+            'labels': labels
+        }
+

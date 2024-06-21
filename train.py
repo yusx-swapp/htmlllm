@@ -16,27 +16,13 @@ import mlflow
 from torch.nn import functional as F
 
 import argparse
-
-
-def parse_args():
-    parser = argparse.ArgumentParser(
-        description="Finetune a transformers model on a causal language modeling task")
-    parser.add_argument("--local_rank",
-                        type=int,
-                        default=-1,
-                        help="local_rank for distributed training on gpus")
-
-    if config.DEEPSPEED_ENABLE:
-        import deepspeed
-        parser = deepspeed.add_config_arguments(parser)
-    args = parser.parse_args()
-
-    return args
+import deepspeed
+from deepspeed import get_accelerator
 
 
 if __name__ == '__main__':
-    args = parse_args()
-    model, train_dataloader, optimizer, scheduler, local_rank, rank, world_size = setup.setup()
+
+    model, train_dataloader, optimizer, scheduler, local_rank, rank, world_size, tokenizer = setup.setup()
     global_step = 0
 
     # MLflow is an open-source platform designed to assist machine learning practitioners and teams in managing the complexities of the machine learning process.
@@ -50,19 +36,53 @@ if __name__ == '__main__':
     if utils.is_master(rank):
         print('model:', model)
 
+    if config.DEEPSPEED_ENABLE:
+        ds_config = utils.get_train_ds_config(offload=config.OFFLOAD_TO_CPU,
+                                              micro_bs=config.BATCH_SIZE,
+                                              dtype=config.D_TYPE,
+                                              stage=config.ZERO_STAGE,
+                                              enable_tensorboard=config.D_TENSORBOARD,
+                                              enable_wandb=config.D_WANDB,
+                                              tb_path=os.path.join(
+                                                  config.OUTPUT_DIR, 'ds_tensorboard'),
+                                              tb_name=config.EXPERIMENT_NAME)
+        ds_config[
+            'train_micro_batch_size_per_gpu'] = config.BATCH_SIZE
+        ds_config[
+            'train_batch_size'] = config.BATCH_SIZE * torch.distributed.get_world_size(
+        )
+        torch.distributed.barrier()
+        model, optimizer, _, scheduler = deepspeed.initialize(
+            model=model,
+            optimizer=optimizer,
+            # args=args,
+            config=ds_config,
+            lr_scheduler=scheduler,
+            dist_init_required=True)
+        get_accelerator().set_device(local_rank)
+        device = torch.device(
+            get_accelerator().device_name(), local_rank)
+
+    model.gradient_checkpointing_enable()
     for epoch in range(config.NUM_EPOCHS):
 
         # disable: This disables the progress bar if local_rank is not 0.
         for step, data in tqdm(enumerate(train_dataloader), total=len(train_dataloader), disable=not utils.is_master(rank),
                                desc=f'Epoch {epoch}/{config.NUM_EPOCHS}'):
             model.train()
-            data = utils.to_device(data, local_rank)
-            loss = model(**data).loss
-
             if config.DEEPSPEED_ENABLE:
+                # inputs = {k: v.to(model.device) for k, v in data.items() if k != 'labels'}
+
+                # labels = data['labels']
+
+                data = utils.to_device(data, device)
+                # print(len(data['input_ids']))
+                outputs = model(**data, use_cache=False)
+                loss = outputs.loss
                 model.backward(loss)
                 model.step()
             else:
+                loss = model(**data).loss
                 loss.backward()
 
                 # clip the gradient norm of an iterable of parameters in PyTorch.
@@ -83,7 +103,7 @@ if __name__ == '__main__':
                     global_rank = dist.get_rank()
                     if global_rank == 0:
                         utils.save_hf_format(
-                            model, config.TOKENIZER, checkpoint_dir)
+                            model, tokenizer, checkpoint_dir)
                     if config.ZERO_STAGE == 3:
                         utils.save_zero_three_model(
                             model, global_rank, checkpoint_dir, config.ZERO_STAGE)
@@ -101,4 +121,5 @@ if __name__ == '__main__':
             dist.barrier()
             global_step += 1
 
+    dist.destroy_process_group()
 # torchrun -np 16 python train.py

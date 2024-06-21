@@ -37,7 +37,7 @@ if __name__ == '__main__':
     tokenizer.padding_side = 'left'
 
     df_test = pd.read_csv(config.TEST_FILE, sep='\t', header=None, encoding="utf-8")
-    df_test.columns = ['URLHash', 'Snippet', 'NodeList']
+    df_test.columns = ['URLHash', 'Snippet']
 
     if world_size > 1:
         # ensure num of samples can be divided by world_size, to make all_gather_into_tensor work correctly

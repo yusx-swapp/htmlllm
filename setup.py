@@ -1,5 +1,6 @@
 # DONE
 
+import argparse
 import dataset
 import utils
 import config
@@ -12,10 +13,30 @@ from torch.utils.data import DistributedSampler
 from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
 import torch.optim as optim
 import pandas as pd
-from transformers import default_data_collator, get_cosine_schedule_with_warmup
+from transformers import default_data_collator, get_cosine_schedule_with_warmup, AutoTokenizer, AutoModelForCausalLM
+from deepspeed import get_accelerator
+from deepspeed.ops.adam import DeepSpeedCPUAdam, FusedAdam
+import deepspeed
+import copy
+
+
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description="Finetune a transformers model on a causal language modeling task")
+    parser.add_argument("--local_rank",
+                        type=int,
+                        default=-1,
+                        help="local_rank for distributed training on gpus")
+
+    parser = deepspeed.add_config_arguments(parser)
+    args = parser.parse_args()
+
+    return args
 
 
 def setup():
+    if config.DEEPSPEED_ENABLE:
+        args = parse_args()
 
     # setup distributed environment
     # world_size: total number of processes
@@ -30,19 +51,12 @@ def setup():
     # checks whether the distributed process group has been successfully initialized.
     timeout = timedelta(hours=5)
     if config.DEEPSPEED_ENABLE:
-        import deepspeed
-        from deepspeed import get_accelerator
+
         get_accelerator().set_device(local_rank)
+        device = torch.device(
+            get_accelerator().device_name(), local_rank)
         deepspeed.init_distributed()
-        ds_config = utils.get_train_ds_config(offload=config.OFFLOAD_TO_CPU,
-                                              micro_bs=config.BATCH_SIZE,
-                                              dtype=config.D_TYPE,
-                                              stage=config.ZERO_STAGE,
-                                              enable_tensorboard=config.D_TENSORBOARD,
-                                              enable_wandb=config.D_WANDB,
-                                              tb_path=os.path.join(
-                                                  config.OUTPUT_DIR, 'ds_tensorboard'),
-                                              tb_name=config.EXPERIMENT_NAME)
+
     else:
         dist.init_process_group("nccl", timeout=timeout,
                                 rank=rank, world_size=world_size)
@@ -53,8 +67,9 @@ def setup():
     torch.cuda.empty_cache()
 
     # initialize tokenizer & model from config
-    tokenizer = config.TOKENIZER
-    model = config.MODEL
+    tokenizer = AutoTokenizer.from_pretrained(config.MODEL_PATH)
+    model = AutoModelForCausalLM.from_pretrained(
+        config.MODEL_PATH, load_in_8bit=False, device_map=None, torch_dtype=torch.float16, use_cache=True, trust_remote_code=True)
 
     # setting the padding token to be the same as the beginning of sequence token
     # padding from left (dataset class takes dependency)
@@ -88,11 +103,11 @@ def setup():
     dtype = torch.bfloat16
     model.config.pad_token_id = model.config.bos_token_id
     model.to(dtype=dtype)
+
     # Update code based on the Dataset
     df_train = pd.read_csv(config.TRAIN_FILE, sep='\t',
                            header=None, encoding="utf-8")
     df_train.columns = ['URLHash', 'Snippet', 'NodeList']
-
     train_dataset = dataset.TrainDataset(
         snippets=df_train['Snippet'], tasks=df_train['NodeList'], tokenizer=tokenizer)
 
@@ -110,36 +125,31 @@ def setup():
     train_dataloader = torch.utils.data.DataLoader(
         train_dataset,
         batch_size=config.BATCH_SIZE,
-        num_workers=4,
+        # num_workers=4,
         pin_memory=True,
         sampler=train_sampler,
         drop_last=True,
         collate_fn=default_data_collator,
     )
+
     if config.DEEPSPEED_ENABLE:
-        from deepspeed.ops.adam import DeepSpeedCPUAdam
-        import deepspeed
-        AdamOptimizer = DeepSpeedCPUAdam if config.OFFLOAD_TO_CPU else optim.AdamW
-        optimizer = AdamOptimizer(model.parameters(),
+
+        AdamOptimizer = DeepSpeedCPUAdam if config.OFFLOAD_TO_CPU else FusedAdam
+        optimizer_grouped_parameters = utils.get_optimizer_grouped_parameters(
+            model, weight_decay=0.)
+        optimizer = AdamOptimizer(optimizer_grouped_parameters,
                                   lr=config.LEARNING_RATE,
-                                  weight_decay=0.)
+                                  betas=(0.9, 0.95))
         scheduler = get_cosine_schedule_with_warmup(
             optimizer,
             num_warmup_steps=len(train_dataloader) * config.WARMUP,
             num_training_steps=len(train_dataloader) * config.NUM_EPOCHS
         )
-        model, optimizer, _, scheduler = deepspeed.initialize(
-            model=model,
-            optimizer=optimizer,
-            # args=args,
-            config=ds_config,
-            lr_scheduler=scheduler,
-            dist_init_required=True)
+
     else:
-        # gradient checkpointing is a technique that helps reduce the memory footprint required for executing large neural network models during training.
+        # gradient checkpointing moved before train loop
         # during the forward pass, gradient checkpointing does not store all intermediate activations.
         # it strategically selects certain activations to save, allowing only a fraction of the activations to be re-computed during the backward pass.
-        model.gradient_checkpointing_enable()
 
         # auto_wrap_policy controls which layers in the model will be wrapped in FSDP
         # limit_all_gathers=True: This argument controls whether to limit all gather operations. This can help to save memory when the model is large.
@@ -166,4 +176,4 @@ def setup():
             num_training_steps=len(train_dataloader) * config.NUM_EPOCHS
         )
 
-    return model, train_dataloader, optimizer, scheduler, local_rank, rank, world_size
+    return model, train_dataloader, optimizer, scheduler, local_rank, rank, world_size, tokenizer
