@@ -188,9 +188,9 @@ def get_train_ds_config(offload,
         "offload_optimizer": {
             "device": device
         },
-        "stage3_param_persistence_threshold": 1e4,
-        "stage3_max_live_parameters": 3e7,
-        "stage3_prefetch_bucket_size": 3e7,
+        # "stage3_param_persistence_threshold": 1e4,
+        # "stage3_max_live_parameters": 3e7,
+        # "stage3_prefetch_bucket_size": 3e7,
         "memory_efficient_linear": False,
         # "zero_quantized_weights": True,
         # "zero_hpz_partition_size": 16,
@@ -313,4 +313,3 @@ def get_optimizer_grouped_parameters(
         if group["params"]:
             non_empty_groups.append(group)
     return non_empty_groups
-

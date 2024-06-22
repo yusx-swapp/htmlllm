@@ -117,7 +117,7 @@ def setup():
         rank=rank,
         num_replicas=world_size,
         shuffle=True,
-        seed=42,
+        # seed=42,
     )
 
     # PyTorch allocates pinned memory for the data loader. This pinned memory is directly accessible by the GPU, which can significantly speed up data transfer.
