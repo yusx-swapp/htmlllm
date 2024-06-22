@@ -67,7 +67,8 @@ def setup():
     torch.cuda.empty_cache()
 
     # initialize tokenizer & model from config
-    tokenizer = AutoTokenizer.from_pretrained(config.MODEL_PATH)
+    tokenizer = AutoTokenizer.from_pretrained(
+        config.MODEL_PATH, trust_remote_code=True)
     model = AutoModelForCausalLM.from_pretrained(
         config.MODEL_PATH, load_in_8bit=False, device_map=None, torch_dtype=torch.float16, use_cache=True, trust_remote_code=True)
 
