@@ -6,11 +6,11 @@
 BATCH_SIZE = 2  # TODO: Check before submit job (Checked)
 NUM_EPOCHS = 3  # TODO: Check before submit job (Checked)
 # TODO: Check before submit job (Checked, smaller for Phi-3)
-LEARNING_RATE = 2e-5
+LEARNING_RATE = 5e-5
 WARMUP = 0.1
-EXPERIMENT_NAME = 'Default'
+EXPERIMENT_NAME = 'llm_tune'
 DISABLE_MLFLOW = False
-STEPS_EVAL = 500  # TODO: Check before submit job (Checked)
+STEPS_EVAL = 100  # TODO: Check before submit job (Checked)
 # DeepSpeed basic configuration
 DEEPSPEED_ENABLE = True  # TODO: Check before submit job (Checked)
 # (slower, but memory efficient) Enable this to offload optimizer to CPU
@@ -31,13 +31,14 @@ TRAIN_FILE = MOUNT_PATH + '/code/htmlllm/data/TrainingDataMerged.tsv'
 TEST_FILE = MOUNT_PATH + '/code/htmlllm/data/GTXHtmlSnippets.tsv'
 GENERATED_FILE = MOUNT_PATH + '/data/test_run.tsv'
 # TODO: Check before submit job (Checked)
-OUTPUT_DIR = MOUNT_PATH + '/output/output_Codestral-22B-run1/'
+OUTPUT_DIR = MOUNT_PATH + '/output/output_Mistral-mixed-data-A100-run2/'
 
 # MODEL Details
 # MODEL_PATH = MOUNT_PATH + '/chec/mistral/mistral_hf/7B'
 # MODEL_PATH = "microsoft/Phi-3-mini-4k-instruct"
-MODEL_PATH = "mistralai/Codestral-22B-v0.1"
+# MODEL_PATH = "mistralai/Codestral-22B-v0.1"
 # MODEL_PATH = "mistralai/Mistral-7B-Instruct-v0.3"  # TODO: Check before submit job (Checked)
+MODEL_PATH = "/data/output/output_Mistral-mixed-data-A100-run2/step-4500/step-0"
 ENABLE_NEFTUNE = True
 NEFTUNE_ALPHA = 0
 
