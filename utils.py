@@ -229,7 +229,7 @@ def get_train_ds_config(offload,
         },
         "wandb": {
             "enabled": enable_wandb,
-            "project": "htmlLLM"
+            "project": config.EXPERIMENT_NAME,
         }
     }
 
