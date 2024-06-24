@@ -3,10 +3,10 @@
 # from transformers import AutoTokenizer, AutoModelForCausalLM
 # import torch
 
-BATCH_SIZE = 4  # TODO: Check before submit job (Checked)
+BATCH_SIZE = 2  # TODO: Check before submit job (Checked)
 NUM_EPOCHS = 3  # TODO: Check before submit job (Checked)
 # TODO: Check before submit job (Checked, smaller for Phi-3)
-LEARNING_RATE = 2e-5
+LEARNING_RATE = 3e-6
 WARMUP = 0.1
 EXPERIMENT_NAME = 'Default'
 DISABLE_MLFLOW = False
@@ -31,15 +31,16 @@ TRAIN_FILE = MOUNT_PATH + '/code/htmlllm/data/TrainingDataMerged.tsv'
 TEST_FILE = MOUNT_PATH + '/code/htmlllm/data/GTXHtmlSnippets.tsv'
 GENERATED_FILE = MOUNT_PATH + '/data/test_run.tsv'
 # TODO: Check before submit job (Checked)
-# OUTPUT_DIR = MOUNT_PATH + '/output/output_Mistral-mixed-data-A100-run2/'
-OUTPUT_DIR = MOUNT_PATH + '/output/output_Phi3-small-A100-run1/'
+OUTPUT_DIR = MOUNT_PATH + '/output/output_Mistral-mixed-data-new-run2/'
+# OUTPUT_DIR = MOUNT_PATH + '/output/output_Phi3-small-A100-run1/'
 # MODEL Details
 # MODEL_PATH = MOUNT_PATH + '/chec/mistral/mistral_hf/7B'
 # MODEL_PATH = "microsoft/Phi-3-mini-4k-instruct"
 # MODEL_PATH = "mistralai/Codestral-22B-v0.1"
-# MODEL_PATH = "mistralai/Mistral-7B-Instruct-v0.3"  # TODO: Check before submit job (Checked)
+# TODO: Check before submit job (Checked)
+MODEL_PATH = "mistralai/Mistral-7B-Instruct-v0.3"
 # MODEL_PATH = "/data/output/output_Mistral-mixed-data-A100-run2/step-0"
-MODEL_PATH = "microsoft/Phi-3-small-8k-instruct"
+# MODEL_PATH = "microsoft/Phi-3-small-8k-instruct"
 ENABLE_NEFTUNE = True
 NEFTUNE_ALPHA = 0
 

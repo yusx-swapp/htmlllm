@@ -44,8 +44,8 @@ if __name__ == '__main__':
     dist.barrier()
     # setting the padding token to be the same as the beginning of sequence token
     # padding from left
-    tokenizer = AutoTokenizer.from_pretrained(
-        eval_config.OUTPUT_DIR)
+    tokenizer = AutoTokenizer.from_pretrained(  # TODO EVAL TODO
+        eval_config.OUTPUT_DIR, trust_remote_code=True)
     tokenizer.pad_token = tokenizer.bos_token
     tokenizer.padding_side = 'left'
 
@@ -66,7 +66,7 @@ if __name__ == '__main__':
         eval_dataset, batch_size=eval_config.BATCH_SIZE, shuffle=False)
 
     model = AutoModelForCausalLM.from_pretrained(
-        eval_config.OUTPUT_DIR, load_in_8bit=False, device_map=f'cuda:{local_rank}', torch_dtype=torch.float16, use_cache=True)
+        eval_config.OUTPUT_DIR, load_in_8bit=False, device_map=f'cuda:{local_rank}', torch_dtype=torch.float16, use_cache=True, trust_remote_code=True)
 
     model.config.bos_token_id = tokenizer.bos_token_id
     model.config.eos_token_id = tokenizer.eos_token_id
@@ -83,6 +83,7 @@ if __name__ == '__main__':
 
     for i, x in tqdm(enumerate(eval_dataloader), total=len(eval_dataloader), disable=(local_rank != 0)):
         model_inputs = BatchEncoding(x).to(f'cuda:{local_rank}')
+        torch.cuda.set_device(f'cuda:{local_rank}')
         with torch.no_grad():
 
             output = model.generate(
