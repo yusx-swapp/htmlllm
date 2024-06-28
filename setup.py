@@ -113,6 +113,12 @@ def setup():
     if config.PRE_TRAIN:
         train_dataset = dataset.PreTrainDataset(
             snippets=df_train['Snippet'], tokenizer=tokenizer)
+        if config.TEST_FILE:
+            df_test = pd.read_csv(config.TEST_FILE, sep='\t',
+                                  header=None, encoding="utf-8")
+            df_test.columns = ['URLHash', 'Snippet']
+            eval_dataset = dataset.PreTrainDataset(
+                snippets=df_test['Snippet'], tokenizer=tokenizer)
     else:
         train_dataset = dataset.TrainDataset(
             snippets=df_train['Snippet'], tasks=df_train['NodeList'], tokenizer=tokenizer)
@@ -142,6 +148,25 @@ def setup():
         drop_last=True,
         collate_fn=data_collator,
     )
+    if config.TEST_FILE and config.PRE_TRAIN:
+        eval_sampler = DistributedSampler(
+            eval_dataset,
+            rank=rank,
+            num_replicas=world_size,
+            shuffle=False,
+            # seed=42,
+        )
+        eval_dataloader = torch.utils.data.DataLoader(
+            eval_dataset,
+            batch_size=config.BATCH_SIZE,
+            # num_workers=4,
+            pin_memory=True,
+            sampler=eval_sampler,
+            drop_last=True,
+            collate_fn=data_collator,
+        )
+    else:
+        eval_dataloader = None
 
     if config.DEEPSPEED_ENABLE:
 
@@ -187,4 +212,4 @@ def setup():
             num_training_steps=len(train_dataloader) * config.NUM_EPOCHS
         )
 
-    return model, train_dataloader, optimizer, scheduler, local_rank, rank, world_size, tokenizer
+    return model, train_dataloader, eval_dataloader, optimizer, scheduler, local_rank, rank, world_size, tokenizer

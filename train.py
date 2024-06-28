@@ -44,7 +44,7 @@ def eval_perplexity(model, eval_dataloader):
 
 if __name__ == '__main__':
 
-    model, train_dataloader, optimizer, scheduler, local_rank, rank, world_size, tokenizer = setup.setup()
+    model, train_dataloader, eval_dataloader, optimizer, scheduler, local_rank, rank, world_size, tokenizer = setup.setup()
     global_step = 0
 
     # MLflow is an open-source platform designed to assist machine learning practitioners and teams in managing the complexities of the machine learning process.
@@ -137,7 +137,11 @@ if __name__ == '__main__':
                         os.popen(
                             f'cp {config.MODEL_PATH}/token* {checkpoint_dir}')
                     print("done saving checkpoint...")
-
+                if eval_dataloader:
+                    perplexity = eval_perplexity(model, eval_dataloader)
+                    if (not config.DISABLE_MLFLOW) and utils.is_master(rank):
+                        mlflow.log_metric(
+                            'eval_perplexity', perplexity, step=global_step)
             # The dist.barrier() function is typically used in distributed deep learning frameworks to synchronize processes during training.
             # When a process calls dist.barrier(), it waits until all other processes in the distributed group have also called dist.barrier().
             dist.barrier()
