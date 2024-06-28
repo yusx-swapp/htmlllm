@@ -20,6 +20,28 @@ import deepspeed
 from deepspeed import get_accelerator
 
 
+def eval_perplexity(model, eval_dataloader):
+    model.eval()
+    total_loss = 0
+    total_samples = 0
+    for step, data in tqdm(enumerate(eval_dataloader), total=len(eval_dataloader), disable=not utils.is_master(rank),
+                           desc=f'Eval'):
+        with torch.no_grad():
+            loss = model(**data).loss
+            total_loss += loss.item()
+            total_samples += 1
+    data.clear()
+    avg_loss = total_loss / total_samples
+    try:
+        dist.all_reduce(avg_loss, op=dist.ReduceOp.SUM)
+    except:
+        pass
+    avg_loss = avg_loss / dist.get_world_size()
+
+    perplexity = torch.exp(torch.tensor(avg_loss))
+    return perplexity.item()
+
+
 if __name__ == '__main__':
 
     model, train_dataloader, optimizer, scheduler, local_rank, rank, world_size, tokenizer = setup.setup()
