@@ -5,6 +5,28 @@ from torch.utils.data import Dataset, DataLoader
 import copy
 
 
+class PreTrainDataset(Dataset):
+    def __init__(self, snippets, tokenizer):
+        self.snippets = snippets
+        self.tokenizer = tokenizer
+
+    def __len__(self):
+        return len(self.snippets)
+
+    def __getitem__(self, item):
+        snippet = self.snippets[item]
+        # res = self.tokenizer(snippet, add_special_tokens=False, max_length=config.MAX_LENGTH_PRETRAIN, padding='max_length', truncation=True)
+        res = self.tokenizer(f"{self.tokenizer.bos_token} {snippet} {self.tokenizer.eos_token}",
+                             add_special_tokens=False, max_length=config.MAX_LENGTH_PRETRAIN, padding='max_length', truncation='only_first')
+
+        # There is no need to have labels for pre-training,
+        # hf models will automatically shift the input_ids to the right as labels
+        return {
+            'input_ids': torch.tensor(res['input_ids'], dtype=torch.int64),
+            'attention_mask': torch.tensor(res['attention_mask'])
+        }
+
+
 class TrainDataset(Dataset):
     def __init__(self, snippets, tasks, tokenizer):
         self.snippets = snippets
@@ -76,13 +98,13 @@ class EvalDataset(Dataset):
         }
 
 
-
 class PromptDataset(Dataset):
     def __init__(self, dataset, tokenizer, max_seq_len=4096):
         self.dataset = dataset
         self.tokenizer = tokenizer
         self.max_seq_len = max_seq_len
-        #['URLHash', 'Snippet', 'NodeList']
+        # ['URLHash', 'Snippet', 'NodeList']
+
     def __len__(self):
         return len(self.dataset)
 
@@ -98,13 +120,7 @@ class PromptDataset(Dataset):
         res = self.tokenizer(f"{self.tokenizer.bos_token} {context}", generate_text + f" {self.tokenizer.eos_token}",
                              add_special_tokens=False, max_length=self.max_seq_len, padding='max_length',
                              truncation='only_first')
-        # # padding left
-        # tokenized_prompt = self.tokenizer(
-        #     prompt, padding="max_length",
-        #     truncation=True,
-        #     max_length=self.max_seq_len,
-        #     return_tensors="pt")
-        # Count length of Generate Text so that Context can be masked
+
         generate_text_num_tokens = len(self.tokenizer.encode(generate_text + f" {self.tokenizer.eos_token}",
                                                              add_special_tokens=False, padding=False))
         # Initialize labels as Input Token Ids and later mask context
@@ -127,4 +143,3 @@ class PromptDataset(Dataset):
             'attention_mask': torch.tensor(res['attention_mask']),
             'labels': labels
         }
-
