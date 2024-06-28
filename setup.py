@@ -13,7 +13,7 @@ from torch.utils.data import DistributedSampler
 from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
 import torch.optim as optim
 import pandas as pd
-from transformers import default_data_collator, get_cosine_schedule_with_warmup, AutoTokenizer, AutoModelForCausalLM
+from transformers import default_data_collator, get_cosine_schedule_with_warmup, AutoTokenizer, AutoModelForCausalLM, DataCollatorForLanguageModeling
 from deepspeed import get_accelerator
 from deepspeed.ops.adam import DeepSpeedCPUAdam, FusedAdam
 import deepspeed
@@ -109,8 +109,13 @@ def setup():
     df_train = pd.read_csv(config.TRAIN_FILE, sep='\t',
                            header=None, encoding="utf-8")
     df_train.columns = ['URLHash', 'Snippet', 'NodeList']
-    train_dataset = dataset.TrainDataset(
-        snippets=df_train['Snippet'], tasks=df_train['NodeList'], tokenizer=tokenizer)
+
+    if config.PRE_TRAIN:
+        train_dataset = dataset.PreTrainDataset(
+            snippets=df_train['Snippet'], tokenizer=tokenizer)
+    else:
+        train_dataset = dataset.TrainDataset(
+            snippets=df_train['Snippet'], tasks=df_train['NodeList'], tokenizer=tokenizer)
 
     # DistributedSampler ensures that each process (GPU) samples a different subset of data from the train_dataset
     train_sampler = DistributedSampler(
@@ -124,6 +129,10 @@ def setup():
     # PyTorch allocates pinned memory for the data loader. This pinned memory is directly accessible by the GPU, which can significantly speed up data transfer.
     # drop_last: DataLoader will drop the last batch if its size is less than the specified batch size
     # default_data_collator is a simple utility in the Hugging Face Transformers library that helps create batches of data for training or evaluation.
+    data_collator = default_data_collator
+    if config.PRE_TRAIN:
+        # If pre-training, we use the DataCollatorForLanguageModeling class instead of the default data collator.
+        data_collator = DataCollatorForLanguageModeling(tokenizer, mlm=False)
     train_dataloader = torch.utils.data.DataLoader(
         train_dataset,
         batch_size=config.BATCH_SIZE,
@@ -131,7 +140,7 @@ def setup():
         pin_memory=True,
         sampler=train_sampler,
         drop_last=True,
-        collate_fn=default_data_collator,
+        collate_fn=data_collator,
     )
 
     if config.DEEPSPEED_ENABLE:
