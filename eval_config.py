@@ -18,7 +18,7 @@ def parse_args():
 
 
 args = parse_args()
-BATCH_SIZE = 4  # TODO: Check before submit job (Checked)
+BATCH_SIZE = 8  # TODO: Check before submit job (Checked)
 NUM_EPOCHS = 3  # TODO: Check before submit job (Checked)
 # TODO: Check before submit job (Checked, smaller for Phi-3)
 LEARNING_RATE = 3e-5
@@ -38,23 +38,23 @@ D_WANDB = False  # Not recommended to enable this, as it will conflict with MLfl
 D_TYPE = 'bf16'  # bf16 is faster and memory efficient
 
 
-MOUNT_PATH = '/data'  # TODO: Check before submit job (Checked)
-M_MOUNT_PATH = '/data'  # TODO: Check before submit job (Checked)
+MOUNT_PATH = '/vdata'  # TODO: Check before submit job (Checked)
+M_MOUNT_PATH = '/mdata'  # TODO: Check before submit job (Checked)
 # DATA
 # TODO: Check before submit job (Checked)
 TRAIN_FILE = MOUNT_PATH + '/code/htmlllm/data/TrainingDataMerged.tsv'
-TEST_FILE = M_MOUNT_PATH + '/code/htmlllm/data/GTXHtmlSnippets.tsv'
-
+# TEST_FILE = M_MOUNT_PATH + '/code/htmlllm/data/GTXHtmlSnippets.tsv'
+TEST_FILE = MOUNT_PATH + '/data/GTXHtmlSnippetsv2.tsv'
 
 STEP = args.STEP
-GENERATED_FILE = M_MOUNT_PATH + \
-    '/eval/Sixing-Mistral-Resume-'+f"step-{STEP}.tsv"  # TODO EVAL TODO
+GENERATED_FILE = MOUNT_PATH + \
+    '/eval/Modelv8-Mistral-'+f"step-{STEP}.tsv"  # TODO EVAL TODO
 # TODO: Check before submit job (Checked)
-OUTPUT_DIR = M_MOUNT_PATH + \
-    '/output/output_Mistral-mixed-data-A100-run3/' + \
+OUTPUT_DIR = MOUNT_PATH + \
+    '/modelv8/' + \
     f"step-{STEP}"  # TODO EVAL TODO
-# META_INFO_DIR = M_MOUNT_PATH + "/output/output_Mistral-mixed-data-MI200-run1/step-0/"
-META_INFO_DIR = None
+META_INFO_DIR = M_MOUNT_PATH + "/output/output_Mistral-mixed-data-MI200-run1/step-0/"
+# META_INFO_DIR = None
 
 # MODEL Details
 # MODEL_PATH = MOUNT_PATH + '/chec/mistral/mistral_hf/7B'
