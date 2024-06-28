@@ -116,7 +116,7 @@ def setup():
         if config.TEST_FILE:
             df_test = pd.read_csv(config.TEST_FILE, sep='\t',
                                   header=None, encoding="utf-8")
-            df_test.columns = ['URLHash', 'Snippet']
+            df_test.columns = ['URLHash', 'Snippet', 'NodeList']
             eval_dataset = dataset.PreTrainDataset(
                 snippets=df_test['Snippet'], tokenizer=tokenizer)
     else:

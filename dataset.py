@@ -15,9 +15,9 @@ class PreTrainDataset(Dataset):
 
     def __getitem__(self, item):
         snippet = self.snippets[item]
-        # res = self.tokenizer(snippet, add_special_tokens=False, max_length=config.MAX_LENGTH_PRETRAIN, padding='max_length', truncation=True)
+        # res = self.tokenizer(snippet, add_special_tokens=False, max_length=config.MAX_LENGTH_TRAIN, padding='max_length', truncation=True)
         res = self.tokenizer(f"{self.tokenizer.bos_token} {snippet} {self.tokenizer.eos_token}",
-                             add_special_tokens=False, max_length=config.MAX_LENGTH_PRETRAIN, padding='max_length', truncation='only_first')
+                             add_special_tokens=False, max_length=config.MAX_LENGTH_TRAIN, padding='max_length', truncation='only_first')
 
         # There is no need to have labels for pre-training,
         # hf models will automatically shift the input_ids to the right as labels
