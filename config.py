@@ -1,8 +1,4 @@
-
-
-# from transformers import AutoTokenizer, AutoModelForCausalLM
-# import torch
-
+PRE_TRAIN = True
 BATCH_SIZE = 2  # TODO: Check before submit job (Checked)
 NUM_EPOCHS = 3  # TODO: Check before submit job (Checked)
 # TODO: Check before submit job (Checked, smaller for Phi-3)
