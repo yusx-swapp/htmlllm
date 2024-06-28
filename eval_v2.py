@@ -8,7 +8,6 @@ import numpy as np
 from torch.utils.data import Dataset, DataLoader
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from torch.nn.parallel import DistributedDataParallel as DDP
-from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
 from tqdm import tqdm
 from transformers.tokenization_utils_base import BatchEncoding
 import csv
@@ -27,6 +26,9 @@ def process_inference(raw_result):
 
 
 if __name__ == '__main__':
+
+    filew_generate = csv.writer(
+        open(eval_config.GENERATED_FILE, "w", newline='', encoding="utf-8"), delimiter='\t')
 
     dist.init_process_group("nccl")
     world_size = dist.get_world_size()
@@ -80,9 +82,8 @@ if __name__ == '__main__':
 
     # DDP (Distributed Data Parallel)
     # It takes the original model and distributes its parameters across different devices (GPUs or CPUs) specified by the device_ids
-    # if world_size > 1:
-    #     ddp_model = DDP(model, device_ids=[local_rank])
-    # ddp_model = FSDP(model, cpu_offload=True)
+    if world_size > 1:
+        ddp_model = DDP(model, device_ids=[local_rank])
     model.eval()
 
     generated_ids = []
@@ -93,54 +94,48 @@ if __name__ == '__main__':
         with torch.no_grad():
 
             output = model.generate(
-                **model_inputs, max_new_tokens=eval_config.MAX_NEW_TOKENS, eos_token_id=tokenizer.eos_token_id).detach().to('cpu')
+                **model_inputs, max_new_tokens=eval_config.MAX_NEW_TOKENS, eos_token_id=tokenizer.eos_token_id).detach()
 
             # Generated output will be of different length
             # Creating a zero tensor and copying all output to ensure same length of output
             fixed_size_tensor = torch.zeros(
-                output.shape[0], eval_config.MAX_LENGTH_INFERENCE + eval_config.MAX_NEW_TOKENS)
-            fixed_size_tensor[:output.shape[0],
-                              :output.shape[1]] = output.to('cpu')
+                output.shape[0], eval_config.MAX_LENGTH_INFERENCE + eval_config.MAX_NEW_TOKENS).to(output.device)
+            fixed_size_tensor[:output.shape[0], :output.shape[1]] = output
 
-            generated_ids.append(fixed_size_tensor.to('cpu'))
+            generated_ids.append(fixed_size_tensor)
 
-    dist.barrier()
+        dist.barrier()
 
     # Combining different batches of generated text
     generated_ids = torch.cat(generated_ids, dim=0)
 
     if world_size > 1:
-        # all_ids = torch.zeros(dist.get_world_size() * len(generated_ids), eval_config.MAX_LENGTH_INFERENCE +
-        #                       eval_config.MAX_NEW_TOKENS, dtype=generated_ids.dtype).cuda(local_rank)
+        all_ids = torch.zeros(dist.get_world_size() * len(df_test), eval_config.MAX_LENGTH_INFERENCE +
+                              eval_config.MAX_NEW_TOKENS, dtype=generated_ids.dtype).cuda(local_rank)
         # gathers tensors from multiple machines in a distributed computing environment.
         gathered_results = [None for _ in range(dist.get_world_size())]
-        dist.all_gather_object(gathered_results, generated_ids.to('cpu'))
+        dist.all_gather_object(gathered_results, generated_ids)
 
         # tensor
-        # for i, res in enumerate(gathered_results):
-        #     all_ids[i::dist.get_world_size()] = res
+        idx = 0
+        for i, res in enumerate(gathered_results):
+            all_ids[idx:idx+len(res)] = res
+            idx += len(res)
         # dist.all_gather_into_tensor(all_ids, generated_ids)
     else:
         all_ids = generated_ids
 
     if utils.is_master(local_rank):
-        filew_generate = csv.writer(
-            open(eval_config.GENERATED_FILE, "w", newline='', encoding="utf-8"), delimiter='\t')
+        # for i, all_ids in enumerate(gathered_results):
+        #     print(f"Rank {i} has {all_ids.shape[0]} samples")
 
-        for i, all_ids in enumerate(gathered_results):
-            print(f"Rank {i} has {all_ids.shape[0]} samples")
-
-            all_ids = all_ids.long()
-            parsed_inference, parsed_input = process_inference(
-                tokenizer.batch_decode(all_ids, skip_special_tokens=True))
-            for i in range(len(parsed_inference)):
-                filew_generate.writerow(
-                    (parsed_input[i], parsed_inference[i]))
-
+        all_ids = all_ids.long()
+        parsed_inference, parsed_input = process_inference(
+            tokenizer.batch_decode(all_ids, skip_special_tokens=True))
+        for i in range(len(parsed_inference)):
+            filew_generate.writerow((parsed_input[i], parsed_inference[i]))
         # all_ids = all_ids.long()
         # parsed_inference, parsed_input = process_inference(
         #     tokenizer.batch_decode(all_ids, skip_special_tokens=True))
         # for i in range(len(parsed_inference)):
         #     filew_generate.writerow((parsed_input[i], parsed_inference[i]))
-    dist.barrier()
-    dist.destroy_process_group()

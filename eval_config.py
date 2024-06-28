@@ -53,7 +53,8 @@ GENERATED_FILE = MOUNT_PATH + \
 OUTPUT_DIR = MOUNT_PATH + \
     '/modelv8/' + \
     f"step-{STEP}"  # TODO EVAL TODO
-META_INFO_DIR = M_MOUNT_PATH + "/output/output_Mistral-mixed-data-MI200-run1/step-0/"
+META_INFO_DIR = M_MOUNT_PATH + \
+    "/output/output_Mistral-mixed-data-MI200-run1/step-0/"  # TODO EVAL TODO
 # META_INFO_DIR = None
 
 # MODEL Details
