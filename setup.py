@@ -117,8 +117,16 @@ def setup():
             df_test = pd.read_csv(config.TEST_FILE, sep='\t',
                                   header=None, encoding="utf-8")
             df_test.columns = ['URLHash', 'Snippet', 'NodeList']
-            eval_dataset = dataset.PreTrainDataset(
-                snippets=df_test['Snippet'], tokenizer=tokenizer)
+        # Number of samples to keep
+        num_samples_keep = 1024  # Adjust this number as needed
+        # Randomly sample the DataFrame
+        df_sampled = df_test.sample(n=num_samples_keep, random_state=42)
+
+        # Optional: Reset the index of the sampled DataFrame
+        df_sampled.reset_index(drop=True, inplace=True)
+
+        eval_dataset = dataset.PreTrainDataset(
+            snippets=df_test['Snippet'], tokenizer=tokenizer)
     else:
         train_dataset = dataset.TrainDataset(
             snippets=df_train['Snippet'], tasks=df_train['NodeList'], tokenizer=tokenizer)

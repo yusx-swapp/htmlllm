@@ -27,6 +27,7 @@ def eval_perplexity(model, eval_dataloader):
     for step, data in tqdm(enumerate(eval_dataloader), total=len(eval_dataloader), disable=not utils.is_master(rank),
                            desc=f'Eval'):
         with torch.no_grad():
+            data = utils.to_device(data, device)
             loss = model(**data).loss
             total_loss += loss.item()
             total_samples += 1
@@ -39,6 +40,7 @@ def eval_perplexity(model, eval_dataloader):
     avg_loss = avg_loss / dist.get_world_size()
 
     perplexity = torch.exp(torch.tensor(avg_loss))
+    print(f'Perplexity: {perplexity.item()}')
     return perplexity.item()
 
 
