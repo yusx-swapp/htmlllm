@@ -126,7 +126,7 @@ def setup():
         df_sampled.reset_index(drop=True, inplace=True)
 
         eval_dataset = dataset.PreTrainDataset(
-            snippets=df_test['Snippet'], tokenizer=tokenizer)
+            snippets=df_sampled['Snippet'], tokenizer=tokenizer)
     else:
         train_dataset = dataset.TrainDataset(
             snippets=df_train['Snippet'], tasks=df_train['NodeList'], tokenizer=tokenizer)
