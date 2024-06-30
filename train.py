@@ -84,8 +84,8 @@ if __name__ == '__main__':
             lr_scheduler=scheduler,
             dist_init_required=True)
         get_accelerator().set_device(local_rank)
-        device = torch.device(
-            get_accelerator().device_name(), local_rank)
+    device = torch.device(
+        get_accelerator().device_name(), local_rank)
 
     model.gradient_checkpointing_enable()
     for epoch in range(config.NUM_EPOCHS):
