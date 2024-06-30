@@ -109,6 +109,8 @@ def setup():
     df_train = pd.read_csv(config.TRAIN_FILE, sep='\t',
                            header=None, encoding="utf-8")
     df_train.columns = ['URLHash', 'Snippet', 'NodeList']
+    if config.SUB_DATASET:
+        df_train = df_train.sample(n=config.SUB_DATASET, random_state=42)
     train_dataset = dataset.TrainDataset(
         snippets=df_train['Snippet'], tasks=df_train['NodeList'], tokenizer=tokenizer)
 
