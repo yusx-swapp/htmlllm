@@ -110,7 +110,8 @@ def setup():
                            header=None, encoding="utf-8")
     df_train.columns = ['URLHash', 'Snippet', 'NodeList']
     if config.SUB_DATASET:
-        df_train = df_train.sample(n=config.SUB_DATASET, random_state=42)
+        df_train = df_train.sample(n=config.SUB_DATASET, random_state=168)
+        df_train.reset_index(drop=True, inplace=True)
     train_dataset = dataset.TrainDataset(
         snippets=df_train['Snippet'], tasks=df_train['NodeList'], tokenizer=tokenizer)
 
