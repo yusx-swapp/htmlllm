@@ -120,6 +120,19 @@ if __name__ == '__main__':
             # When a process calls dist.barrier(), it waits until all other processes in the distributed group have also called dist.barrier().
             dist.barrier()
             global_step += 1
-
+    print("Done training, saving final model...")
+    checkpoint_dir = os.path.join(config.OUTPUT_DIR, 'final_model')
+    if config.DEEPSPEED_ENABLE:
+        global_rank = dist.get_rank()
+        if global_rank == 0:
+            utils.save_hf_format(model, tokenizer, checkpoint_dir)
+        if config.ZERO_STAGE == 3:
+            utils.save_zero_three_model(
+                model, global_rank, checkpoint_dir, config.ZERO_STAGE)
+    else:
+        utils.save_model_checkpoint(model, checkpoint_dir, rank)
+        if utils.is_master(rank):
+            os.popen(f'cp {config.MODEL_PATH}/*.json {checkpoint_dir}')
+            os.popen(f'cp {config.MODEL_PATH}/token* {checkpoint_dir}')
     dist.destroy_process_group()
 # torchrun -np 16 python train.py
