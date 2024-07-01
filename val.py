@@ -26,6 +26,29 @@ def process_inference(raw_result):
     return parsed_inference, parsed_input
 
 
+def calculate_metrics(input, labels):
+    precision = []
+    recall = []
+    f1 = []
+    for i in range(len(input)):
+        pred = set(input[i].split())
+        true = set(labels[i].split())
+        if len(pred) == 0:
+            precision.append(0)
+        else:
+            precision.append(len(pred.intersection(true)) / len(pred))
+        if len(true) == 0:
+            recall.append(0)
+        else:
+            recall.append(len(pred.intersection(true)) / len(true))
+        if precision[-1] + recall[-1] == 0:
+            f1.append(0)
+        else:
+            f1.append(2 * precision[-1] * recall[-1] /
+                      (precision[-1] + recall[-1]))
+    return precision, recall, f1
+
+
 if __name__ == '__main__':
 
     dist.init_process_group("nccl")
@@ -50,7 +73,7 @@ if __name__ == '__main__':
 
     df_test = pd.read_csv(eval_config.TEST_FILE, sep='\t',
                           header=None, encoding="utf-8")
-    df_test.columns = ['URLHash', 'Snippet']
+    df_test.columns = ['URLHash', 'Snippet', 'NodeList']
 
     if local_rank == 0:
         print(f"Total samples: {len(df_test)}")
@@ -64,10 +87,10 @@ if __name__ == '__main__':
         print(
             f"Rank {local_rank} has {len(df_test_rank)} samples, and the total samples are {len(df_test)}")
 
-    eval_dataset = dataset.EvalDataset(
-        snippets=df_test_rank['Snippet'].to_list(), tokenizer=tokenizer)
+    eval_dataset = dataset.ValDataset(
+        snippets=df_test_rank['Snippet'].to_list(), node_ids=df_test_rank['NodeList'].to_list(), tokenizer=tokenizer)
     eval_dataloader = DataLoader(
-        eval_dataset, batch_size=eval_config.BATCH_SIZE, shuffle=False)
+        eval_dataset, batch_size=eval_config.BATCH_SIZE, shuffle=False, collate_fn=dataset.ValCollate)
 
     model = AutoModelForCausalLM.from_pretrained(
         eval_config.OUTPUT_DIR, load_in_8bit=False, device_map=f'cuda:{local_rank}', torch_dtype=torch.float16, use_cache=True, trust_remote_code=True)
@@ -77,16 +100,12 @@ if __name__ == '__main__':
     model.config.pad_token_id = model.config.bos_token_id
     model = model.to(torch.bfloat16)
 
-    # DDP (Distributed Data Parallel)
-    # It takes the original model and distributes its parameters across different devices (GPUs or CPUs) specified by the device_ids
-    # if world_size > 1:
-    #     ddp_model = DDP(model, device_ids=[local_rank])
-    # ddp_model = FSDP(model, cpu_offload=True)
     model.eval()
 
     generated_ids = []
-
-    for i, x in tqdm(enumerate(eval_dataloader), total=len(eval_dataloader), disable=(local_rank != 0)):
+    all_node_ids = []
+    for i, batch in tqdm(enumerate(eval_dataloader), total=len(eval_dataloader), disable=(local_rank != 0)):
+        x, node_ids = batch
         model_inputs = BatchEncoding(x).to(f'cuda:{local_rank}')
         torch.cuda.set_device(f'cuda:{local_rank}')
         with torch.no_grad():
@@ -102,44 +121,38 @@ if __name__ == '__main__':
                               :output.shape[1]] = output.to('cpu')
 
             generated_ids.append(fixed_size_tensor.to('cpu'))
-
+            all_node_ids.extend(node_ids)
     dist.barrier()
 
     # Combining different batches of generated text
     generated_ids = torch.cat(generated_ids, dim=0)
-
+    all_node_ids = torch.tensor(all_node_ids)
     if world_size > 1:
-        # all_ids = torch.zeros(dist.get_world_size() * len(generated_ids), eval_config.MAX_LENGTH_INFERENCE +
-        #                       eval_config.MAX_NEW_TOKENS, dtype=generated_ids.dtype).cuda(local_rank)
-        # gathers tensors from multiple machines in a distributed computing environment.
+
         gathered_results = [None for _ in range(dist.get_world_size())]
         dist.all_gather_object(gathered_results, generated_ids.to('cpu'))
 
-        # tensor
-        # for i, res in enumerate(gathered_results):
-        #     all_ids[i::dist.get_world_size()] = res
-        # dist.all_gather_into_tensor(all_ids, generated_ids)
+        gathered_node_ids = [None for _ in range(dist.get_world_size())]
+        dist.all_gather_object(gathered_node_ids, all_node_ids.to('cpu'))
     else:
-        all_ids = generated_ids
+        gathered_results = [generated_ids]
+        gathered_node_ids = [all_node_ids]
 
     if utils.is_master(local_rank):
         filew_generate = csv.writer(
             open(eval_config.GENERATED_FILE, "w", newline='', encoding="utf-8"), delimiter='\t')
 
-        for i, all_ids in enumerate(gathered_results):
+        for i, all_ids, all_node_ids in enumerate(zip(gathered_results, gathered_node_ids)):
             print(f"Rank {i} has {all_ids.shape[0]} samples")
 
             all_ids = all_ids.long()
             parsed_inference, parsed_input = process_inference(
                 tokenizer.batch_decode(all_ids, skip_special_tokens=True))
+            precision, recall, f1 = calculate_metrics(
+                parsed_inference, all_node_ids)
             for i in range(len(parsed_inference)):
                 filew_generate.writerow(
                     (parsed_input[i], parsed_inference[i]))
 
-        # all_ids = all_ids.long()
-        # parsed_inference, parsed_input = process_inference(
-        #     tokenizer.batch_decode(all_ids, skip_special_tokens=True))
-        # for i in range(len(parsed_inference)):
-        #     filew_generate.writerow((parsed_input[i], parsed_inference[i]))
     dist.barrier()
     dist.destroy_process_group()

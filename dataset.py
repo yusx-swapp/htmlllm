@@ -54,6 +54,43 @@ class TrainDataset(Dataset):
         }
 
 
+class ValDataset(Dataset):
+    def __init__(self, snippets, node_ids, tokenizer):
+        super().__init__()
+        self.snippets = snippets
+        self.node_ids = node_ids
+        self.tokenizer = tokenizer
+        assert len(self.snippets) == len(self.node_ids)
+
+    def __len__(self):
+        return len(self.snippets)
+
+    def __getitem__(self, item):
+        snippet = self.snippets[item]
+        node_id = self.node_ids[item]
+
+        context = utils.apply_prompt_part1_template(snippet)
+        res = self.tokenizer(f"{self.tokenizer.bos_token} {context}", config.PROMPT_PART2_INFERENCE, add_special_tokens=False,
+                             max_length=config.MAX_LENGTH_INFERENCE, padding='max_length', truncation='only_first')
+
+        return {
+            'input_ids': torch.tensor(res['input_ids']),
+            'attention_mask': torch.tensor(res['attention_mask']),
+            'node_id': node_id
+        }
+
+
+def ValCollate(batch):
+    input_ids = [item['input_ids'] for item in batch]
+    attention_mask = [item['attention_mask'] for item in batch]
+    node_ids = [item['node_id'] for item in batch]
+
+    return {
+        'input_ids': torch.stack(input_ids, dim=0),
+        'attention_mask': torch.stack(attention_mask, dim=0),
+    }, node_ids
+
+
 class EvalDataset(Dataset):
     def __init__(self, snippets, tokenizer):
         self.snippets = snippets
@@ -76,13 +113,13 @@ class EvalDataset(Dataset):
         }
 
 
-
 class PromptDataset(Dataset):
     def __init__(self, dataset, tokenizer, max_seq_len=4096):
         self.dataset = dataset
         self.tokenizer = tokenizer
         self.max_seq_len = max_seq_len
-        #['URLHash', 'Snippet', 'NodeList']
+        # ['URLHash', 'Snippet', 'NodeList']
+
     def __len__(self):
         return len(self.dataset)
 
@@ -127,4 +164,3 @@ class PromptDataset(Dataset):
             'attention_mask': torch.tensor(res['attention_mask']),
             'labels': labels
         }
-
