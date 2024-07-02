@@ -3,7 +3,7 @@ import torch
 from pathlib import Path
 from dataclasses import dataclass
 from functools import partial
-from torch.distributed.fsdp import ShardingStrategy, FullStateDictConfig
+from torch.distributed.fsdp import ShardingStrategy, FullStateDictConfig, OptimStateDictConfig
 from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
 from torch.distributed.fsdp.wrap import transformer_auto_wrap_policy
 from torch.distributed.fsdp.fully_sharded_data_parallel import StateDictType
@@ -57,14 +57,20 @@ def to_device(batch, device):
 
 def save_model_checkpoint(
         model,
+        tokenizer,
         output_dir,
+        scheduler,
+        optimizer,
         rank
 ):
     with FSDP.state_dict_type(
-            model, StateDictType.FULL_STATE_DICT, fullstate_save_policy
+            model, StateDictType.FULL_STATE_DICT, fullstate_save_policy, optim_state_dict_config=OptimStateDictConfig(
+                offload_to_cpu=True)
     ):
         # the state dictionary of a model (referred to as model) is saved
         cpu_state = model.state_dict()
+        scheduler_state = scheduler.state_dict()
+        optimizer_state = FSDP.optim_state_dict(model, optimizer)
         print(f"saving process: rank {rank}  done w model state_dict\n")
 
     if rank == 0:
@@ -72,10 +78,20 @@ def save_model_checkpoint(
         save_dir = Path.cwd() / output_dir
         save_dir.mkdir(parents=True, exist_ok=True)
         save_full_path = str(save_dir) + "/pytorch_model.bin"
-
+        save_scheduler_path = str(save_dir) + "/scheduler.pt"
+        save_optimizer_path = str(save_dir) + "/optimizer.pt"
+        config_path = str(save_dir) + "/config.json"
         # save model
+        model_to_save = model.module if hasattr(model, 'module') else model
+        model_to_save.config.to_json_file(config_path)
         torch.save(cpu_state, save_full_path)
-
+        torch.save(scheduler_state, save_scheduler_path)
+        torch.save(optimizer_state, save_optimizer_path)
+        try:
+            tokenizer.save_vocabulary(output_dir)
+        except:
+            pass
+        tokenizer.save_pretrained(output_dir)
         print(f"model checkpoint saved at {save_full_path}\n")
 
 
