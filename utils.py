@@ -3,7 +3,7 @@ import torch
 from pathlib import Path
 from dataclasses import dataclass
 from functools import partial
-from torch.distributed.fsdp import ShardingStrategy, FullStateDictConfig, OptimStateDictConfig
+from torch.distributed.fsdp import ShardingStrategy, FullStateDictConfig, FullOptimStateDictConfig
 from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
 from torch.distributed.fsdp.wrap import transformer_auto_wrap_policy
 from torch.distributed.fsdp.fully_sharded_data_parallel import StateDictType
@@ -55,16 +55,20 @@ def to_device(batch, device):
     return output
 
 
+def load_training_status(optimizer, scheduler, model, ckpt_path):
+    pass
+
+
 def save_model_checkpoint(
         model,
         tokenizer,
-        output_dir,
         scheduler,
         optimizer,
+        output_dir,
         rank
 ):
     with FSDP.state_dict_type(
-            model, StateDictType.FULL_STATE_DICT, fullstate_save_policy, optim_state_dict_config=OptimStateDictConfig(
+            model, StateDictType.FULL_STATE_DICT, fullstate_save_policy, optim_state_dict_config=FullOptimStateDictConfig(
                 offload_to_cpu=True)
     ):
         # the state dictionary of a model (referred to as model) is saved

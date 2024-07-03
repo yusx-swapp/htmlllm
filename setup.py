@@ -172,10 +172,17 @@ def setup():
             lr=config.LEARNING_RATE,
             weight_decay=0.0,
         )
+        full_osd = torch.load(
+            config.MODEL_PATH + '/optimizer.pt')
+        sharded_osd = FSDP.shard_full_optim_state_dict(full_osd, model)
+        optimizer.load_state_dict(sharded_osd)
+
         scheduler = get_cosine_schedule_with_warmup(
             optimizer,
             num_warmup_steps=len(train_dataloader) * config.WARMUP,
             num_training_steps=len(train_dataloader) * config.NUM_EPOCHS
         )
+        scheduler.load_state_dict(torch.load(
+            config.MODEL_PATH + '/scheduler.pt'))
 
     return model, train_dataloader, optimizer, scheduler, local_rank, rank, world_size, tokenizer
