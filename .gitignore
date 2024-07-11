@@ -1,0 +1,7 @@
+*.tsv
+*test*
+*.ipynb
+*.json
+*.csv
+statistic/*
+*.ini

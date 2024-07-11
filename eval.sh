@@ -1,0 +1,21 @@
+#!/bin/bash
+torchrun --nproc-per-node 16 eval.py --STEP 29500
+torchrun --nproc-per-node 16 eval.py --STEP 30000
+torchrun --nproc-per-node 16 eval.py --STEP 30500
+torchrun --nproc-per-node 16 eval.py --STEP 31000
+torchrun --nproc-per-node 16 eval.py --STEP 31500
+torchrun --nproc-per-node 16 eval.py --STEP 32000
+torchrun --nproc-per-node 16 eval.py --STEP 32500
+torchrun --nproc-per-node 16 eval.py --STEP 33000
+torchrun --nproc-per-node 16 eval.py --STEP 33500
+torchrun --nproc-per-node 16 eval.py --STEP 34000
+torchrun --nproc-per-node 16 eval.py --STEP 34500
+torchrun --nproc-per-node 16 eval.py --STEP 35000
+torchrun --nproc-per-node 16 eval.py --STEP 35500
+torchrun --nproc-per-node 16 eval.py --STEP 36000
+torchrun --nproc-per-node 16 eval.py --STEP 36500
+torchrun --nproc-per-node 16 eval.py --STEP 37000
+torchrun --nproc-per-node 16 eval.py --STEP 37500
+torchrun --nproc-per-node 16 eval.py --STEP 38000
+torchrun --nproc-per-node 16 eval.py --STEP 38500
+torchrun --nproc-per-node 16 eval.py --STEP 39000
