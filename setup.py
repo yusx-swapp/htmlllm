@@ -116,7 +116,7 @@ def setup():
     df_train_part_2 = pd.read_csv(config.M_SET_FILE, sep='\t',
                                   header=None, encoding="utf-8")
     df_train = pd.concat([df_train_part_1, df_train_part_2])
-
+    df_train.reset_index(drop=True, inplace=True)
     df_train.columns = ['URLHash', 'Snippet', 'NodeList']
 
     train_dataset = dataset.TrainDataset(
