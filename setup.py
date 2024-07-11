@@ -106,12 +106,19 @@ def setup():
     model.to(dtype=dtype)
 
     # Update code based on the Dataset
-    df_train = pd.read_csv(config.TRAIN_FILE, sep='\t',
-                           header=None, encoding="utf-8")
-    df_train.columns = ['URLHash', 'Snippet', 'NodeList']
+    df_train_part_1 = pd.read_csv(config.TRAIN_FILE, sep='\t',
+                                  header=None, encoding="utf-8")
     if config.SUB_DATASET:
-        df_train = df_train.sample(n=config.SUB_DATASET, random_state=168)
-        df_train.reset_index(drop=True, inplace=True)
+        df_train_part_1 = df_train_part_1.sample(
+            n=config.SUB_DATASET, random_state=config.SUBSET_RANDOM_SEED)
+        df_train_part_1.reset_index(drop=True, inplace=True)
+
+    df_train_part_2 = pd.read_csv(config.M_SET_FILE, sep='\t',
+                                  header=None, encoding="utf-8")
+    df_train = pd.concat([df_train_part_1, df_train_part_2])
+
+    df_train.columns = ['URLHash', 'Snippet', 'NodeList']
+
     train_dataset = dataset.TrainDataset(
         snippets=df_train['Snippet'], tasks=df_train['NodeList'], tokenizer=tokenizer)
 
