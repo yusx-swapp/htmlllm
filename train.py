@@ -2,32 +2,23 @@
 
 import config
 import utils
-import dataset
 import setup
 import os
-import json
 from tqdm import tqdm
-import multiprocessing
-import shutil
 import torch
 import torch.distributed as dist
 import utils
 import mlflow
-from torch.nn import functional as F
-
-import argparse
-import deepspeed
-from deepspeed import get_accelerator
 
 
-def eval_perplexity(model, eval_dataloader):
+def eval_perplexity(model, eval_dataloader, local_rank=-1):
     model.eval()
     total_loss = 0
     total_samples = 0
     for step, data in tqdm(enumerate(eval_dataloader), total=len(eval_dataloader), disable=not utils.is_master(rank),
                            desc=f'Eval'):
         with torch.no_grad():
-            data = utils.to_device(data, device)
+            data = utils.to_device(data, local_rank)
             loss = model(**data).loss
             total_loss += loss.item()
             total_samples += 1
@@ -60,33 +51,6 @@ if __name__ == '__main__':
     if utils.is_master(rank):
         print('model:', model)
 
-    if config.DEEPSPEED_ENABLE:
-        ds_config = utils.get_train_ds_config(offload=config.OFFLOAD_TO_CPU,
-                                              micro_bs=config.BATCH_SIZE,
-                                              dtype=config.D_TYPE,
-                                              stage=config.ZERO_STAGE,
-                                              enable_tensorboard=config.D_TENSORBOARD,
-                                              enable_wandb=config.D_WANDB,
-                                              tb_path=os.path.join(
-                                                  config.OUTPUT_DIR, 'ds_tensorboard'),
-                                              tb_name=config.EXPERIMENT_NAME)
-        ds_config[
-            'train_micro_batch_size_per_gpu'] = config.BATCH_SIZE
-        ds_config[
-            'train_batch_size'] = config.BATCH_SIZE * torch.distributed.get_world_size(
-        )
-        torch.distributed.barrier()
-        model, optimizer, _, scheduler = deepspeed.initialize(
-            model=model,
-            optimizer=optimizer,
-            # args=args,
-            config=ds_config,
-            lr_scheduler=scheduler,
-            dist_init_required=True)
-        get_accelerator().set_device(local_rank)
-    device = torch.device(
-        get_accelerator().device_name(), local_rank)
-
     model.gradient_checkpointing_enable()
     for epoch in range(config.NUM_EPOCHS):
 
@@ -95,12 +59,7 @@ if __name__ == '__main__':
                                desc=f'Epoch {epoch}/{config.NUM_EPOCHS}'):
             model.train()
             if config.DEEPSPEED_ENABLE:
-                # inputs = {k: v.to(model.device) for k, v in data.items() if k != 'labels'}
-
-                # labels = data['labels']
-
-                data = utils.to_device(data, device)
-                # print(len(data['input_ids']))
+                data = utils.to_device(data, local_rank)
                 outputs = model(**data, use_cache=False)
                 loss = outputs.loss
                 model.backward(loss)
@@ -124,13 +83,12 @@ if __name__ == '__main__':
                 checkpoint_dir = os.path.join(
                     config.OUTPUT_DIR, f'step-{global_step}')
                 if config.DEEPSPEED_ENABLE:
-                    global_rank = dist.get_rank()
-                    if global_rank == 0:
+                    if rank == 0:
                         utils.save_hf_format(
                             model, tokenizer, checkpoint_dir)
                     if config.ZERO_STAGE == 3:
                         utils.save_zero_three_model(
-                            model, global_rank, checkpoint_dir, config.ZERO_STAGE)
+                            model, rank, checkpoint_dir, config.ZERO_STAGE)
                 else:
                     utils.save_model_checkpoint(model, checkpoint_dir, rank)
                     if utils.is_master(rank):
@@ -139,8 +97,10 @@ if __name__ == '__main__':
                         os.popen(
                             f'cp {config.MODEL_PATH}/token* {checkpoint_dir}')
                     print("done saving checkpoint...")
+
                 if eval_dataloader:
-                    perplexity = eval_perplexity(model, eval_dataloader)
+                    perplexity = eval_perplexity(
+                        model, eval_dataloader, local_rank)
                     if (not config.DISABLE_MLFLOW) and utils.is_master(rank):
                         mlflow.log_metric(
                             'eval_perplexity', perplexity, step=global_step)
@@ -149,5 +109,19 @@ if __name__ == '__main__':
             dist.barrier()
             global_step += 1
 
+    print("Done training, saving final model...")
+    checkpoint_dir = os.path.join(config.OUTPUT_DIR, 'final_model')
+    if config.DEEPSPEED_ENABLE:
+
+        if rank == 0:
+            utils.save_hf_format(model, tokenizer, checkpoint_dir)
+        if config.ZERO_STAGE == 3:
+            utils.save_zero_three_model(
+                model, rank, checkpoint_dir, config.ZERO_STAGE)
+    else:
+        utils.save_model_checkpoint(model, checkpoint_dir, rank)
+        if utils.is_master(rank):
+            os.popen(f'cp {config.MODEL_PATH}/*.json {checkpoint_dir}')
+            os.popen(f'cp {config.MODEL_PATH}/token* {checkpoint_dir}')
     dist.destroy_process_group()
 # torchrun -np 16 python train.py

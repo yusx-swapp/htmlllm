@@ -1,12 +1,16 @@
-PRE_TRAIN = True
-BATCH_SIZE = 4  # TODO: Check before submit job (Checked)
+
+
+# from transformers import AutoTokenizer, AutoModelForCausalLM
+# import torch
+
+BATCH_SIZE = 2  # TODO: Check before submit job (Checked)
 NUM_EPOCHS = 3  # TODO: Check before submit job (Checked)
 # TODO: Check before submit job (Checked, smaller for Phi-3)
-LEARNING_RATE = 1e-5
+LEARNING_RATE = 3e-6
 WARMUP = 0.1
 EXPERIMENT_NAME = 'Default'
 DISABLE_MLFLOW = False
-STEPS_EVAL = 500  # TODO: Check before submit job (Checked)
+STEPS_EVAL = 100  # TODO: Check before submit job (Checked)
 # DeepSpeed basic configuration
 DEEPSPEED_ENABLE = True  # TODO: Check before submit job (Checked)
 # (slower, but memory efficient) Enable this to offload optimizer to CPU
@@ -19,22 +23,22 @@ D_WANDB = False  # Not recommended to enable this, as it will conflict with MLfl
 D_TYPE = 'bf16'  # bf16 is faster and memory efficient
 
 
-MOUNT_PATH = '/vdata'  # TODO: Check before submit job (Checked)
-M_MOUNT_PATH = '/mdata'
+MOUNT_PATH = '/data'  # TODO: Check before submit job (Checked)
+
 # DATA
 # TODO: Check before submit job (Checked)
-TRAIN_FILE = MOUNT_PATH + '/data/TrainingDataMergedv2.1.tsv'
-TEST_FILE = MOUNT_PATH + '/data/ValidationDataMergedv2.1.tsv'
+TRAIN_FILE = MOUNT_PATH + '/code/htmlllm/data/TrainingDataMerged.tsv'
+TEST_FILE = MOUNT_PATH + '/code/htmlllm/data/GTXHtmlSnippets.tsv'
 GENERATED_FILE = MOUNT_PATH + '/data/test_run.tsv'
 # TODO: Check before submit job (Checked)
-OUTPUT_DIR = M_MOUNT_PATH + '/out/pretrain_mistral/'
+OUTPUT_DIR = MOUNT_PATH + '/output/output_Mistral-mixed-data-new-run2/'
 # OUTPUT_DIR = MOUNT_PATH + '/output/output_Phi3-small-A100-run1/'
 # MODEL Details
 # MODEL_PATH = MOUNT_PATH + '/chec/mistral/mistral_hf/7B'
 # MODEL_PATH = "microsoft/Phi-3-mini-4k-instruct"
 # MODEL_PATH = "mistralai/Codestral-22B-v0.1"
 # TODO: Check before submit job (Checked)
-MODEL_PATH = "mistralai/Mistral-7B-v0.3"
+MODEL_PATH = "mistralai/Mistral-7B-Instruct-v0.3"
 # MODEL_PATH = "/data/output/output_Mistral-mixed-data-A100-run2/step-0"
 # MODEL_PATH = "microsoft/Phi-3-small-8k-instruct"
 ENABLE_NEFTUNE = True
