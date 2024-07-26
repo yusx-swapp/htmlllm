@@ -14,13 +14,10 @@ from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
 import torch.optim as optim
 import pandas as pd
 from transformers import default_data_collator, get_cosine_schedule_with_warmup, AutoTokenizer, AutoModelForCausalLM
-from deepspeed import get_accelerator
-from deepspeed.ops.adam import DeepSpeedCPUAdam, FusedAdam
-import deepspeed
-import copy
 
 
 def parse_args():
+    import deepspeed
     parser = argparse.ArgumentParser(
         description="Finetune a transformers model on a causal language modeling task")
     parser.add_argument("--local_rank",
@@ -51,7 +48,9 @@ def setup():
     # checks whether the distributed process group has been successfully initialized.
     timeout = timedelta(hours=5)
     if config.DEEPSPEED_ENABLE:
-
+        from deepspeed import get_accelerator
+        from deepspeed.ops.adam import DeepSpeedCPUAdam, FusedAdam
+        import deepspeed
         get_accelerator().set_device(local_rank)
         device = torch.device(
             get_accelerator().device_name(), local_rank)
@@ -135,7 +134,8 @@ def setup():
     )
 
     if config.DEEPSPEED_ENABLE:
-
+        import deepspeed
+        from deepspeed import get_accelerator
         AdamOptimizer = DeepSpeedCPUAdam if config.OFFLOAD_TO_CPU else FusedAdam
         optimizer_grouped_parameters = utils.get_optimizer_grouped_parameters(
             model, weight_decay=0.)
@@ -147,6 +147,30 @@ def setup():
             num_warmup_steps=len(train_dataloader) * config.WARMUP,
             num_training_steps=len(train_dataloader) * config.NUM_EPOCHS
         )
+
+        ds_config = utils.get_train_ds_config(offload=config.OFFLOAD_TO_CPU,
+                                              micro_bs=config.BATCH_SIZE,
+                                              dtype=config.D_TYPE,
+                                              stage=config.ZERO_STAGE,
+                                              enable_tensorboard=config.D_TENSORBOARD,
+                                              enable_wandb=config.D_WANDB,
+                                              tb_path=os.path.join(
+                                                  config.OUTPUT_DIR, 'ds_tensorboard'),
+                                              tb_name=config.EXPERIMENT_NAME)
+        ds_config[
+            'train_micro_batch_size_per_gpu'] = config.BATCH_SIZE
+        ds_config[
+            'train_batch_size'] = config.BATCH_SIZE * torch.distributed.get_world_size(
+        )
+        torch.distributed.barrier()
+        model, optimizer, _, scheduler = deepspeed.initialize(
+            model=model,
+            optimizer=optimizer,
+            # args=args,
+            config=ds_config,
+            lr_scheduler=scheduler,
+            dist_init_required=True)
+        get_accelerator().set_device(local_rank)
 
     else:
         # gradient checkpointing moved before train loop

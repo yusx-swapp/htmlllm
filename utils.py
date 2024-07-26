@@ -234,7 +234,7 @@ def get_train_ds_config(offload,
     }
 
 
-def get_eval_ds_config(offload, dtype, stage=0):
+def get_eval_ds_config(offload, dtype, micro_bs=4, world_size=16, stage=0):
     device = "cpu" if offload else "none"
     if dtype == "fp16":
         data_type = "fp16"
@@ -253,8 +253,8 @@ def get_eval_ds_config(offload, dtype, stage=0):
         "memory_efficient_linear": False
     }
     return {
-        "train_batch_size": GLOBAL_BATCH_SIZE,
-        "train_micro_batch_size_per_gpu": MICRO_BATCH_SIZE,
+        "train_batch_size": micro_bs * world_size,
+        "train_micro_batch_size_per_gpu": micro_bs,
         "steps_per_print": 10,
         "zero_optimization": zero_opt_dict,
         data_type: dtype_config,
